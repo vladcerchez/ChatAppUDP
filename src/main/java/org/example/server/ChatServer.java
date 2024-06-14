@@ -3,30 +3,22 @@ package org.example.server;
 import java.io.IOException;
 import java.net.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class ChatServer {
 
     private static byte[] incoming = new byte[256];
-    private static final int PORT = 8000;
-
+    private static final int PORT = 9999;
     private static DatagramSocket socket;
-
-    static {
-        try {
-            socket = new DatagramSocket(PORT);
-        } catch (SocketException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     private static ArrayList<Integer> users = new ArrayList<>();
-
+    private static final HashMap<Integer, String> userNames = new HashMap<>();
     private static final InetAddress address;
 
     static {
         try {
-            address = InetAddress.getByName("localhost");
-        } catch (UnknownHostException e) {
+            socket = new DatagramSocket(PORT);
+            address = InetAddress.getLocalHost(); // IP address
+        } catch (SocketException | UnknownHostException e) {
             throw new RuntimeException(e);
         }
     }
@@ -48,8 +40,12 @@ public class ChatServer {
             System.out.println("Server received: " + message);
 
 
-            if (message.contains("init;")) {
+            if (message.startsWith("init:")) {
+                String userName = message.substring(6);
                 users.add(packet.getPort());
+                userNames.put(packet.getPort(), userName);
+            }  else if (message.startsWith("/PS ")) {
+                forwardPrivateMessage(message);
             }
             // forward
             else {
@@ -71,5 +67,33 @@ public class ChatServer {
 
 
         }
+    }
+
+    private static void forwardPrivateMessage(String message) {
+        String[] parts = message.split(" ", 3);
+        String recipient = parts[1];
+        String privateMessage = parts[2];
+
+        int recipientPort = getPortForName(recipient);
+
+        byte[] messageBytes = privateMessage.getBytes();
+        InetAddress recipientAddress = address;
+        DatagramPacket privatePacket = new DatagramPacket(messageBytes, messageBytes.length, recipientAddress, recipientPort);
+        try {
+            socket.send(privatePacket);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    // Extract port from userName
+    private static int getPortForName(String name) {
+        for (int port : users) {
+            if (userNames.get(port).equals(name)) {
+                return port;
+            }
+        }
+        return -1; // If not found
     }
 }
